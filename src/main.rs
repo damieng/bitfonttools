@@ -1,37 +1,36 @@
 use structopt::StructOpt;
+use std::process::exit;
+use std::collections::hash_map::Entry;
 
 fn main() {
     let args = Cli::from_args();
 
-    let result = std::fs::read_to_string(&args.path);
-    match result {
-        Err(error) => { println!("{}", error); }
-        Ok(content) => { 
-            make_bdf_proportional(content);
-         }
-    }
-}
+    match bdf::open(&args.inFileName).as_mut()
+    {
+        Ok(font) => {
+            let glyphs = font.glyphs_mut();
+            for gl in glyphs {
+                let glyph = gl.1;
+                let mut width = glyph.width();
 
-enum Section { StartFont, StartChar }
-
-fn make_bdf_proportional(input: String) {
-    let lines = input.lines();
-    let mut section = Section::StartFont;
-    let mut encoding = 0;
-
-    for line in lines  {
-        match section {
-            Section::StartFont => {
-                if line.starts_with("STARTCHAR") {
-                    section = Section::StartChar;
+                for x in 0..glyph.width() {
+                    for y in 0..glyph.height() {
+                        if glyph.get(glyph.width() - x - 1, y) {
+                            width = x;
+                            break;
+                        }
+                    }
                 }
+
+                println!("{}", width);
+                glyph.set_device_width(Some((width, 0)));
             }
-            Section::StartChar => {
-                if line.starts_with("ENCODING") {
-                    encoding =
-                }
-                println!("{}", line);
-            }
+
+            bdf::save(&args.outFileName, &font);
+        }
+        Err(e) => {
+            eprintln!("{}", &*e);
+            exit(1);
         }
     }
 }
@@ -41,5 +40,8 @@ fn make_bdf_proportional(input: String) {
 struct Cli {
     /// The path to the file to read
     #[structopt(parse(from_os_str))]
-    path: std::path::PathBuf,
+    inFileName: std::path::PathBuf,
+
+    #[structopt(parse(from_os_str))]
+    outFileName: std::path::PathBuf,
 }
